@@ -35,7 +35,7 @@ cdef class DAWG:
     cdef Dictionary dct
     cdef _dawg.Dawg dawg
     cdef Guide guide
-    cdef bint completions
+    cdef bint _completions
 
     def __init__(self, arg=None, input_is_sorted=False, completions=False):
         if arg is None:
@@ -46,7 +46,7 @@ cdef class DAWG:
                 for key in arg
             ]
             arg.sort()
-        self.completions = completions
+        self._completions = completions
         self._build_from_iterable(arg)
 
     def __dealloc__(self):
@@ -81,7 +81,7 @@ cdef class DAWG:
         if not _dictionary_builder.Build(self.dawg, &self.dct):
             raise Error("Can't build dictionary")
 
-        if self.completions and self.dawg.num_of_transitions() > 0:
+        if self._completions and self.dawg.num_of_transitions() > 0:
             if not _guide_builder.Build(self.dawg, self.dct, &self.guide):
                 raise Error("Error building completion information")            
 
@@ -98,10 +98,10 @@ cdef class DAWG:
                 self.guide.Clear()
                 self.dct.Clear()
                 raise IOError("Invalid data format: can't load guide")
-            self.completions = True
+            self._completions = True
         else:
             self.guide.Clear()            
-            self.completions = False
+            self._completions = False
 
     def __contains__(self, key):
         if isinstance(key, unicode):
@@ -114,8 +114,8 @@ cdef class DAWG:
     cpdef bint b_has_key(self, bytes key) except -1:
         return self.dct.Contains(key, len(key))
 
-    cpdef completer(self):
-        if not self.completions:
+    cpdef completions(self):
+        if not self._completions:
             raise Error("Cannot create completer on DAWG without completions")
         return PyCompleter(self)
 
@@ -125,7 +125,7 @@ cdef class DAWG:
         """
         cdef stringstream stream
         self.dct.Write(<ostream *> &stream)
-        if self.completions:
+        if self._completions:
             self.guide.Write(<ostream *> &stream)
         cdef bytes res = stream.str()
         return res
@@ -307,12 +307,12 @@ cdef class DAWG:
         )
 
 
-cdef class CompletionDAWG(DAWG):
+cdef class CompletionsDAWG(DAWG):
     """
     DAWG with key completion support.
     """
     def __init__(self, arg=None, **kwargs):
-        super(CompletionDAWG, self).__init__(arg, completions=True, **kwargs)
+        super(CompletionsDAWG, self).__init__(arg, completions=True, **kwargs)
 
 
 cdef void init_completer(Completer& completer, Dictionary& dic, Guide& guide):
@@ -409,7 +409,7 @@ cdef bytes PAYLOAD_SEPARATOR = b'\x01'
 
 DEF MAX_VALUE_SIZE = 32768
 
-cdef class BytesDAWG(CompletionDAWG):
+cdef class BytesDAWG(CompletionsDAWG):
     """
     DAWG that is able to transparently store extra binary payload in keys;
     there may be several payloads for the same key.
@@ -857,7 +857,7 @@ cdef class IntDAWG(DAWG):
         return self.dct.Find(key)
 
 
-cdef class IntCompletionDAWG(IntDAWG):
+cdef class IntCompletionsDAWG(IntDAWG):
     """
     Dict-like class based on DAWG.
     It can store integer values for unicode keys and support key completion.
@@ -868,4 +868,4 @@ cdef class IntCompletionDAWG(IntDAWG):
         ``arg`` must be an iterable of tuples (unicode_key, int_value)
         or a dict {unicode_key: int_value}.
         """
-        super(IntCompletionDAWG, self).__init__(arg, completions=True, **kwargs)
+        super(IntCompletionsDAWG, self).__init__(arg, completions=True, **kwargs)
